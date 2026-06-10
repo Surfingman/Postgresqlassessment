@@ -1,0 +1,6 @@
+# pg_diagnose 의존성
+# 데모 모드(--demo)는 의존성 없이 동작합니다. 아래는 실제 진단 시 필요합니다.
+
+psycopg[binary]>=3.1        # 계층 2: PostgreSQL 엔진 진단
+azure-identity>=1.15        # 인증 (az login / Managed Identity / 환경변수)
+azure-monitor-query>=1.2    # 계층 1: Azure Monitor 메트릭

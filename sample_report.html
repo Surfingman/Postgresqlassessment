@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PostgreSQL 진단 리포트 — DEMO 모드</title>
+<style>
+ :root{--ink:#15202b;--bg:#eef1f5;--card:#fff;--text:#1f2933;--muted:#64748b;--border:#e2e8f0;
+  --azure:#0078D4;--pg:#336791;--crit:#c8362f;--warn:#b07b00;--info:#0a6cbd;--ok:#107c10;}
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--bg);color:var(--text);line-height:1.5;
+  font-family:"Segoe UI",system-ui,-apple-system,"Malgun Gothic",sans-serif}
+ code,.mono,table,.q,.flag,.cost{font-family:"Cascadia Code","Consolas",ui-monospace,monospace}
+ .wrap{max-width:1080px;margin:0 auto;padding:0 20px 64px}
+ header{background:var(--ink);color:#e8eef4;padding:28px 0}
+ .hd{max-width:1080px;margin:0 auto;padding:0 20px;display:flex;justify-content:space-between;
+  align-items:center;gap:24px;flex-wrap:wrap}
+ header h1{font-size:20px;margin:0 0 6px;font-weight:650;letter-spacing:-.2px}
+ .lvl{display:inline-block;font-size:10.5px;letter-spacing:1px;background:rgba(0,120,212,.25);
+  border:1px solid rgba(120,180,230,.4);color:#cfe6fb;border-radius:20px;padding:1px 9px;margin-left:8px}
+ header .meta{font-size:12.5px;color:#9fb2c4} header .meta b{color:#cfe0ee;font-weight:600}
+ .score{text-align:center;padding:10px 22px;border-radius:12px;background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.12)}
+ .score .num{font-size:38px;font-weight:700;line-height:1}
+ .score .lab{font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-top:4px}
+ .score.ok .num{color:#5dd55d} .score.warning .num{color:#ffcf4d} .score.critical .num{color:#ff7a72}
+ .summary{display:flex;gap:12px;margin:22px 0 8px;flex-wrap:wrap}
+ .stat{flex:1;min-width:120px;background:var(--card);border:1px solid var(--border);
+  border-radius:10px;padding:14px 16px}
+ .stat .n{font-size:26px;font-weight:700} .stat .l{font-size:12px;color:var(--muted)}
+ .stat.crit .n{color:var(--crit)} .stat.warn .n{color:var(--warn)} .stat.info .n{color:var(--info)}
+ h2{font-size:15px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);
+  margin:34px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+ .finding{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--muted);
+  border-radius:10px;padding:16px 18px;margin-bottom:12px}
+ .finding.sev-critical{border-left-color:var(--crit)} .finding.sev-warning{border-left-color:var(--warn)}
+ .finding.sev-info{border-left-color:var(--info)} .finding.sev-ok{border-left-color:var(--ok)}
+ .finding-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+ .finding-head h3{font-size:15px;margin:0;flex-basis:100%}
+ .chip{font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;color:#fff}
+ .chip-critical{background:var(--crit)} .chip-warning{background:var(--warn)}
+ .chip-info{background:var(--info)} .chip-ok{background:var(--ok)}
+ .cat{font-size:11.5px;color:var(--muted);border:1px solid var(--border);padding:1px 8px;border-radius:20px}
+ .detail{margin:10px 0;font-size:14px}
+ .reco{background:#f1f6fb;border:1px solid #d8e7f4;border-radius:8px;padding:10px 12px;font-size:13.5px}
+ .reco-label{display:inline-block;font-size:11px;font-weight:700;color:var(--azure);margin-right:8px;
+  text-transform:uppercase;letter-spacing:.5px}
+ .panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+ .kv{font-size:14px;margin:0 0 12px} .kv b{color:var(--pg)}
+ .exp{border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px}
+ .exp-h{display:flex;justify-content:space-between;align-items:center}
+ .exp-h code{font-size:12px;color:var(--pg);font-weight:700}
+ .cost{font-size:11.5px;color:var(--muted)}
+ .q{font-size:11.5px;color:#334;margin:6px 0;overflow-wrap:anywhere}
+ .flags{display:flex;gap:6px;flex-wrap:wrap}
+ .flag{font-size:11px;background:#fff4e5;border:1px solid #f0d8b0;color:#8a5a00;
+  padding:2px 8px;border-radius:6px}
+ .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+ .metric-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px}
+ .metric-name{font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px}
+ .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+ .metric-vals{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin:8px 0 4px}
+ .metric-vals b{color:var(--text);font-size:15px} svg.spark{width:100%;height:40px;display:block}
+ .block{margin-bottom:20px} .block h3{font-size:14px;margin:0 0 8px;color:var(--pg)}
+ table{width:100%;border-collapse:collapse;font-size:12px;background:var(--card);
+  border:1px solid var(--border);border-radius:8px;overflow:hidden}
+ th{background:#f3f6f9;text-align:left;padding:7px 9px;font-weight:600;color:#42526b;
+  border-bottom:1px solid var(--border);white-space:nowrap}
+ td{padding:6px 9px;border-bottom:1px solid #eef2f6;vertical-align:top;max-width:420px;overflow-wrap:anywhere}
+ tr:last-child td{border-bottom:none} tbody tr:hover{background:#f8fbff}
+ .muted{color:var(--muted);font-size:13px} .err{color:var(--crit);font-size:12.5px}
+ .note{color:var(--muted);font-size:12px;margin:4px 0 8px}
+ footer{color:var(--muted);font-size:12px;margin-top:40px;padding-top:16px;border-top:1px solid var(--border)}
+ @media (max-width:640px){.hd{flex-direction:column;align-items:flex-start}}
+</style></head><body>
+<header><div class="hd">
+  <div><h1>Azure PostgreSQL Flexible Server 진단 리포트<span class="lvl">LEVEL 3</span></h1>
+    <div class="meta">대상 <b>DEMO 모드</b> · 버전 <b>16.4 (DEMO)</b>
+      · 메트릭 <b>최근 24시간</b> · 생성 2026-06-09 07:28</div></div>
+  <div class="score critical"><div class="num">0</div><div class="lab">위험</div></div>
+</div></header>
+<div class="wrap">
+  <div class="summary">
+    <div class="stat crit"><div class="n">1</div><div class="l">위험 (Critical)</div></div>
+    <div class="stat warn"><div class="n">8</div><div class="l">주의 (Warning)</div></div>
+    <div class="stat info"><div class="n">4</div><div class="l">정보 (Info)</div></div>
+  </div>
+
+  <h2>발견사항 및 권장 조치</h2>
+  
+        <article class="finding sev-critical">
+          <div class="finding-head"><span class="chip chip-critical">위험</span>
+            <span class="cat">동시성</span><h3>블로킹 락 1건</h3></div>
+          <p class="detail">다른 세션을 대기시키는 락 경합이 있습니다.</p>
+          <div class="reco"><span class="reco-label">권장 조치</span>blocking_pid 트랜잭션 확인, 필요 시 pg_terminate_backend(). 애플리케이션의 긴 트랜잭션을 점검하세요.</div>
+        </article>
+        <article class="finding sev-warning">
+          <div class="finding-head"><span class="chip chip-warning">주의</span>
+            <span class="cat">메모리/캐시</span><h3>&#x27;appdb&#x27; 캐시 히트율 96.5%</h3></div>
+          <p class="detail">OLTP 권장치(≈99%)보다 낮습니다.</p>
+          <div class="reco"><span class="reco-label">권장 조치</span>메모리 여유 및 빈번 쿼리의 인덱스 적중을 확인하세요.</div>
+        </article>
+        <article class="finding sev-warning">
+          <div class="finding-head"><span class="chip chip-warning">주의</span>
+            <span class="cat">유지보수</span><h3>Dead tuple 비율 높은 테이블 1개</h3></div>
+          <p class="detail">20%↑: sessions(42.3%). 스캔 비용 증가·플래너 추정 오류를 유발합니다.</p>
+          <div class="reco"><span class="reco-label">권장 조치</span>VACUUM (ANALYZE) 수행. 갱신 잦으면 테이블별 autovacuum_vacuum_scale_factor 하향.</div>
+        </article>
+        <article class="finding sev-warning">
+          <div class="finding-head"><span class="chip chip-warning">주의</span>
+            <span class="cat">동시성</span><h3>연결 사용률 90% (181/200)</h3></div>
+          <p class="detail">max_connections 한계 근접 — 신규 연결 거부 위험.</p>
+          <div class="reco"><span class="reco-label">권장 조치</span>내장 PgBouncer(연결 풀링) 검토, 애플리케이션 풀 크기 점검.</div>
+        </article>
+        <article class="finding sev-warning">
+          <div class="finding-head"><span class="chip chip-warning">주의</span>
+            <span class="cat">동시성</span><h3>&#x27;idle in transaction&#x27; 8개</h3></div>
+          <p class="detail">미커밋 트랜잭션이 락·vacuum(xmin horizon)을 막을 수 있습니다.</p>
+          <div class="reco"><span class="reco-label">권장 조치</span>idle_in_transaction_session_timeout 설정, 커밋 누락 점검.</div>
+        </article>
+        <article class="finding sev-warning">
+          <div class="finding-head"><span class="chip chip-warning">주의</span>
+            <span class="cat">쿼리 성능</span><h3>60초↑ 실행 세션 1개</h3></div>
+          <p class="detail">장시간 쿼리가 CPU/락/스냅샷을 점유합니다.</p>
+          <div class="reco"><span class="reco-label">권장 조치</span>EXPLAIN (ANALYZE, BUFFERS) 로 계획 확인 후 인덱스/쿼리 튜닝.</div>
+        </article>
+        <article class="finding sev-warning">
+          <div class="finding-head"><span class="chip chip-warning">주의</span>
+            <span class="cat">리소스(Azure)</span><h3>CPU 최대 96.4% (평균 56.8%)</h3></div>
+          <p class="detail">CPU 포화는 쿼리 지연·연결 적체로 확산됩니다.</p>
+          <div class="reco"><span class="reco-label">권장 조치</span>상관 분석/Query Store 로 상위 CPU 쿼리 식별 → 튜닝. 지속 포화 시 vCore 상향.</div>
+        </article>
+        <article class="finding sev-warning">
+          <div class="finding-head"><span class="chip chip-warning">주의</span>
+            <span class="cat">리소스(Azure)</span><h3>메모리 최대 88.1% (평균 70.6%)</h3></div>
+          <p class="detail">메모리 압박은 캐시 효율 저하·OOM 위험을 높입니다.</p>
+          <div class="reco"><span class="reco-label">권장 조치</span>work_mem×연결 수 합산 점검, 필요 시 Memory Optimized SKU.</div>
+        </article>
+        <article class="finding sev-warning">
+          <div class="finding-head"><span class="chip chip-warning">주의</span>
+            <span class="cat">회귀(Baseline)</span><h3>쿼리 -204417 평균시간 +70%</h3></div>
+          <p class="detail">이전 31.4ms → 현재 53.3ms. (SELECT * FROM orders o JOIN order_items i ON i.order_id=o.id WHERE o.status=$1)</p>
+          <div class="reco"><span class="reco-label">권장 조치</span>데이터 증가/통계 노후/계획 변경 가능성. ANALYZE 후 EXPLAIN 비교, 인덱스·파라미터 변화를 점검하세요.</div>
+        </article>
+        <article class="finding sev-info">
+          <div class="finding-head"><span class="chip chip-info">정보</span>
+            <span class="cat">인덱스</span><h3>미사용 인덱스 1개</h3></div>
+          <p class="detail">idx_scan=0 인덱스는 스토리지를 점유하고 쓰기 성능을 떨어뜨립니다.</p>
+          <div class="reco"><span class="reco-label">권장 조치</span>충분한 관찰 기간(예: 1개월+) 확인 후 DROP INDEX CONCURRENTLY.</div>
+        </article>
+        <article class="finding sev-info">
+          <div class="finding-head"><span class="chip chip-info">정보</span>
+            <span class="cat">구성</span><h3>임시 파일 생성 142건</h3></div>
+          <p class="detail">정렬/해시가 work_mem(4096kB)를 초과해 디스크 임시 파일을 사용 중입니다.</p>
+          <div class="reco"><span class="reco-label">권장 조치</span>대상 쿼리 식별 후 세션/롤 단위 work_mem 점진 상향 또는 쿼리 최적화.</div>
+        </article>
+        <article class="finding sev-info">
+          <div class="finding-head"><span class="chip chip-info">정보</span>
+            <span class="cat">실행계획</span><h3>쿼리 -204417: 대형 Seq Scan: orders (≈9,800,000 rows) — 인덱스 후보</h3></div>
+          <p class="detail">GENERIC_PLAN 상 대형 순차 스캔이 잡힙니다. (SELECT * FROM orders o JOIN order_items i ON i.order_id=o.id WHERE o.status=$1)</p>
+          <div class="reco"><span class="reco-label">권장 조치</span>필터/조인 컬럼에 인덱스 검토. EXPLAIN(ANALYZE) 로 실제 행수 확인 후 결정.</div>
+        </article>
+        <article class="finding sev-info">
+          <div class="finding-head"><span class="chip chip-info">정보</span>
+            <span class="cat">대기(Query Store)</span><h3>지배적 대기: IO/DataFileRead (68%)</h3></div>
+          <p class="detail">전체 대기 샘플의 큰 비중을 한 이벤트가 차지합니다.</p>
+          <div class="reco"><span class="reco-label">권장 조치</span>물리 읽기 과다 → 인덱싱/캐시 검토.</div>
+        </article>
+
+  <h2>회귀 분석 · Baseline 대비 (계층 3d)</h2>
+  <div class="panel"><p class="kv">Baseline <b>2026-06-02 22:00:00</b> 대비 &nbsp;·&nbsp; Health Score <b>68 → 0</b> (<span style="color:var(--critical)">-68</span>)</p><table><thead><tr><th>query_id</th><th>이전 mean(ms)</th><th>현재 mean(ms)</th><th>증가</th><th>query</th></tr></thead><tbody><tr><td>-204417</td><td>31.4</td><td>53.3</td><td style='color:var(--crit)'>+70%</td><td>SELECT * FROM orders o JOIN order_items i ON i.order_id=o.id WHERE o.status=$1</td></tr></tbody></table></div>
+
+  <h2>리소스-쿼리 상관 (계층 3c)</h2>
+  <div class="panel"><p class="kv">CPU 피크 <b>06-09 14:00</b> (<span style="color:var(--crit)">96.4%</span>) 시점 윈도우의 지배 쿼리</p><p class="note">시각은 UTC 기준 추정입니다(서버 timezone 확인 권장).</p><table><thead><tr><th>query_id</th><th>calls</th><th>total_ms</th><th>mean_ms</th><th>query</th></tr></thead><tbody><tr><td>-204417</td><td>1840</td><td>220411.0</td><td>119.8</td><td>SELECT * FROM orders o JOIN order_items i ON i.order_id=o.id WHERE o.status=$1</td></tr><tr><td>55120</td><td>88</td><td>14220.0</td><td>161.6</td><td>UPDATE inventory SET qty=qty-$1 WHERE product_id=$2</td></tr></tbody></table></div>
+
+  <h2>실행계획 분석 · EXPLAIN GENERIC_PLAN (계층 3b)</h2>
+  <div class="panel"><div class="exp"><div class="exp-h"><code>-204417</code><span class="cost">Total Cost 184,220</span></div><div class="q">SELECT * FROM orders o JOIN order_items i ON i.order_id=o.id WHERE o.status=$1</div><div class="flags"><span class="flag">대형 Seq Scan: orders (≈9,800,000 rows) — 인덱스 후보</span><span class="flag">높은 추정 비용 (Total Cost 184,220)</span></div></div><div class="exp"><div class="exp-h"><code>884213</code><span class="cost">Total Cost 8</span></div><div class="q">SELECT id,name,price FROM products WHERE sku=$1</div><div class="flags"><span class="muted">특이 red flag 없음</span></div></div><div class="exp"><div class="exp-h"><code>55120</code><span class="cost">Total Cost 12</span></div><div class="q">UPDATE inventory SET qty=qty-$1 WHERE product_id=$2</div><div class="flags"><span class="muted">특이 red flag 없음</span></div></div></div>
+
+  <h2>Query Store · 시간대별 쿼리 귀속 (계층 3a)</h2>
+  <div class="block"><h3>기간 상위 쿼리 (총 실행시간)</h3><table><thead><tr><th>query_id</th><th>calls</th><th>total_ms</th><th>mean_ms</th><th>max_ms</th><th>query</th></tr></thead><tbody><tr><td>-204417</td><td>18422</td><td>982155.4</td><td>53.3</td><td>2120.5</td><td>SELECT * FROM orders o JOIN order_items i ON i.order_id=o.id WHERE o.status=$1</td></tr><tr><td>55120</td><td>901</td><td>88123.0</td><td>97.8</td><td>880.1</td><td>UPDATE inventory SET qty=qty-$1 WHERE product_id=$2</td></tr><tr><td>884213</td><td>254119</td><td>410233.1</td><td>1.6</td><td>44.0</td><td>SELECT id,name,price FROM products WHERE sku=$1</td></tr></tbody></table></div><div class="block"><h3>대기 통계 (pgms_wait_sampling)</h3><table><thead><tr><th>event_type</th><th>event</th><th>samples</th><th>distinct_queries</th></tr></thead><tbody><tr><td>IO</td><td>DataFileRead</td><td>48210</td><td>37</td></tr><tr><td>Lock</td><td>relation</td><td>12044</td><td>5</td></tr><tr><td>CPU</td><td></td><td>8800</td><td>52</td></tr><tr><td>LWLock</td><td>BufferMapping</td><td>2310</td><td>14</td></tr></tbody></table></div>
+
+  <h2>리소스 추세 · Azure Monitor (계층 1)</h2>
+  <div class="metrics"><div class="metric-card"><div class="metric-name"><span class="dot" style="background:#0078D4"></span>CPU</div><div class="metric-vals"><span>평균 <b>56.8%</b></span><span>최대 <b>96.4%</b></span></div><svg class="spark" viewBox="0 0 220 40" preserveAspectRatio="none"><polyline points="2.0,24.6 11.4,19.5 20.8,14.9 30.2,11.2 39.6,8.8 49.0,10.7 58.3,11.4 67.7,13.4 77.1,16.6 86.5,20.4 95.9,27.3 105.3,31.0 114.7,34.1 124.1,35.9 133.5,4.0 142.9,38.0 152.3,35.4 161.7,31.5 171.0,26.9 180.4,21.7 189.8,19.4 199.2,14.9 208.6,11.4 218.0,9.2" fill="none" stroke="#0078D4" stroke-width="1.6"/></svg></div><div class="metric-card"><div class="metric-name"><span class="dot" style="background:#8661c5"></span>메모리</div><div class="metric-vals"><span>평균 <b>70.6%</b></span><span>최대 <b>88.1%</b></span></div><svg class="spark" viewBox="0 0 220 40" preserveAspectRatio="none"><polyline points="2.0,22.7 11.4,16.7 20.8,11.3 30.2,6.9 39.6,4.0 49.0,6.9 58.3,7.5 67.7,9.6 77.1,13.0 86.5,17.3 95.9,25.8 105.3,29.9 114.7,33.2 124.1,35.1 133.5,35.5 142.9,38.0 152.3,34.9 161.7,30.3 171.0,24.9 180.4,18.7 189.8,16.7 199.2,11.4 208.6,7.3 218.0,4.7" fill="none" stroke="#8661c5" stroke-width="1.6"/></svg></div><div class="metric-card"><div class="metric-name"><span class="dot" style="background:#107c10"></span>IOPS</div><div class="metric-vals"><span>평균 <b>2566.6</b></span><span>최대 <b>3694.7</b></span></div><svg class="spark" viewBox="0 0 220 40" preserveAspectRatio="none"><polyline points="2.0,22.2 11.4,16.3 20.8,10.9 30.2,6.7 39.6,4.0 49.0,5.8 58.3,6.7 67.7,9.2 77.1,13.0 86.5,17.7 95.9,25.3 105.3,29.9 114.7,33.6 124.1,35.9 133.5,36.5 142.9,38.0 152.3,35.1 161.7,30.6 171.0,25.2 180.4,19.2 189.8,16.0 199.2,10.8 208.6,6.8 218.0,4.4" fill="none" stroke="#107c10" stroke-width="1.6"/></svg></div><div class="metric-card"><div class="metric-name"><span class="dot" style="background:#c8362f"></span>스토리지</div><div class="metric-vals"><span>평균 <b>74.5%</b></span><span>최대 <b>74.9%</b></span></div><svg class="spark" viewBox="0 0 220 40" preserveAspectRatio="none"><polyline points="2.0,38.0 11.4,38.0 20.8,34.2 30.2,34.2 39.6,30.4 49.0,30.4 58.3,30.4 67.7,26.7 77.1,26.7 86.5,22.9 95.9,22.9 105.3,22.9 114.7,19.1 124.1,19.1 133.5,15.3 142.9,15.3 152.3,15.3 161.7,11.6 171.0,11.6 180.4,7.8 189.8,7.8 199.2,7.8 208.6,4.0 218.0,4.0" fill="none" stroke="#c8362f" stroke-width="1.6"/></svg></div><div class="metric-card"><div class="metric-name"><span class="dot" style="background:#336791"></span>활성 연결</div><div class="metric-vals"><span>평균 <b>155.3</b></span><span>최대 <b>191.2</b></span></div><svg class="spark" viewBox="0 0 220 40" preserveAspectRatio="none"><polyline points="2.0,22.3 11.4,16.3 20.8,11.0 30.2,6.7 39.6,4.0 49.0,5.9 58.3,6.8 67.7,9.3 77.1,13.0 86.5,17.6 95.9,25.4 105.3,29.9 114.7,33.5 124.1,35.8 133.5,36.4 142.9,38.0 152.3,35.1 161.7,30.6 171.0,25.1 180.4,19.1 189.8,16.1 199.2,10.9 208.6,6.9 218.0,4.4" fill="none" stroke="#336791" stroke-width="1.6"/></svg></div></div>
+
+  <h2>엔진 진단 상세 · PostgreSQL (계층 2)</h2>
+  <section class="esec"><h2>쿼리 성능</h2><div class="block"><h3>총 실행시간 상위 쿼리</h3><table><thead><tr><th>queryid</th><th>calls</th><th>total_ms</th><th>mean_ms</th><th>rows</th><th>cache_hit_pct</th><th>query</th></tr></thead><tbody><tr><td>-204417</td><td>18422</td><td>982155.4</td><td>53.3</td><td>18422</td><td>88.2</td><td>SELECT * FROM orders o JOIN order_items i ON i.order_id=o.id WHERE o.status=$1</td></tr><tr><td>884213</td><td>254119</td><td>410233.1</td><td>1.6</td><td>254119</td><td>99.8</td><td>SELECT id,name,price FROM products WHERE sku=$1</td></tr><tr><td>55120</td><td>901</td><td>88123.0</td><td>97.8</td><td>901</td><td>71.0</td><td>UPDATE inventory SET qty=qty-$1 WHERE product_id=$2</td></tr></tbody></table></div><div class="block"><h3>활성·장시간 세션</h3><table><thead><tr><th>pid</th><th>usename</th><th>datname</th><th>state</th><th>wait_event_type</th><th>wait_event</th><th>dur_sec</th><th>query</th></tr></thead><tbody><tr><td>20451</td><td>appuser</td><td>appdb</td><td>active</td><td>Lock</td><td>relation</td><td>184</td><td>UPDATE inventory SET qty=qty-1 WHERE product_id=771</td></tr></tbody></table></div></section><section class="esec"><h2>동시성 · 락</h2><div class="block"><h3>연결 상태</h3><table><thead><tr><th>total</th><th>active</th><th>idle</th><th>idle_in_txn</th><th>max_connections</th></tr></thead><tbody><tr><td>181</td><td>22</td><td>151</td><td>8</td><td>200</td></tr></tbody></table></div><div class="block"><h3>블로킹 체인</h3><table><thead><tr><th>blocked_pid</th><th>blocked_user</th><th>blocked_sec</th><th>blocked_query</th><th>blocking_pid</th><th>blocking_query</th></tr></thead><tbody><tr><td>20451</td><td>appuser</td><td>184</td><td>UPDATE inventory SET qty=qty-1 WHERE product_id=771</td><td>20310</td><td>UPDATE inventory SET qty=qty+50 WHERE product_id=771 -- 미커밋</td></tr></tbody></table></div></section><section class="esec"><h2>인덱스</h2><div class="block"><h3>미사용 인덱스</h3><table><thead><tr><th>schemaname</th><th>table_name</th><th>index_name</th><th>idx_scan</th><th>index_size</th></tr></thead><tbody><tr><td>public</td><td>orders</td><td>idx_orders_legacy_ref</td><td>0</td><td>612 MB</td></tr></tbody></table></div><div class="block"><h3>Seq scan 과다 테이블</h3><table><thead><tr><th>schemaname</th><th>table_name</th><th>seq_scan</th><th>idx_scan</th><th>seq_tup_read</th><th>n_live_tup</th><th>table_size</th></tr></thead><tbody><tr><td>public</td><td>orders</td><td>84120</td><td>92011</td><td>412000000000</td><td>9800000</td><td>7821 MB</td></tr></tbody></table></div></section><section class="esec"><h2>유지보수 · 캐시</h2><div class="block"><h3>캐시 히트율</h3><table><thead><tr><th>datname</th><th>cache_hit_pct</th><th>xact_commit</th><th>xact_rollback</th><th>temp_files</th><th>temp_bytes</th></tr></thead><tbody><tr><td>appdb</td><td>96.5</td><td>4821044</td><td>1203</td><td>142</td><td>3812 MB</td></tr><tr><td>postgres</td><td>99.9</td><td>88210</td><td>4</td><td>0</td><td>0 bytes</td></tr></tbody></table></div><div class="block"><h3>Dead tuple/vacuum</h3><table><thead><tr><th>schemaname</th><th>table_name</th><th>n_live_tup</th><th>n_dead_tup</th><th>dead_pct</th><th>last_autovacuum</th><th>last_autoanalyze</th></tr></thead><tbody><tr><td>public</td><td>sessions</td><td>120000</td><td>88000</td><td>42.3</td><td>2026-06-08 22:14</td><td>2026-06-08 22:14</td></tr></tbody></table></div><div class="block"><h3>체크포인트</h3><table><thead><tr><th>checkpoints_timed</th><th>checkpoints_req</th><th>write_time_ms</th><th>sync_time_ms</th><th>buffers_written</th></tr></thead><tbody><tr><td>2104</td><td>318</td><td>1820041</td><td>14820</td><td>9120443</td></tr></tbody></table></div></section><section class="esec"><h2>구성 · 스토리지</h2><div class="block"><h3>서버 파라미터</h3><table><thead><tr><th>name</th><th>setting</th><th>unit</th><th>source</th></tr></thead><tbody><tr><td>autovacuum</td><td>on</td><td></td><td>default</td></tr><tr><td>effective_cache_size</td><td>1572864</td><td>8kB</td><td>configuration file</td></tr><tr><td>max_connections</td><td>200</td><td></td><td>configuration file</td></tr><tr><td>shared_buffers</td><td>524288</td><td>8kB</td><td>configuration file</td></tr><tr><td>work_mem</td><td>4096</td><td>kB</td><td>default</td></tr></tbody></table></div><div class="block"><h3>데이터베이스 크기</h3><table><thead><tr><th>datname</th><th>size</th></tr></thead><tbody><tr><td>appdb</td><td>84 GB</td></tr><tr><td>postgres</td><td>12 MB</td></tr></tbody></table></div></section>
+
+  <footer>
+    <p>계층 1(Azure Monitor) + 계층 2(엔진 통계) + 계층 3(Query Store·EXPLAIN·상관·Baseline 회귀)
+    결합. 읽기 전용이며 EXPLAIN 은 ANALYZE 없이 계획만 생성합니다(쿼리 미실행).</p>
+    <p>임계치는 일반 OLTP 휴리스틱입니다. 상관 시각은 UTC 가정이며 서버 timezone 확인을 권장합니다.
+    더 깊은 분석은 포털의 Query Performance Insight·Troubleshooting guides 와 병행하세요.</p>
+  </footer>
+</div></body></html>
